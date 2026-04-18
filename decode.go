@@ -1114,6 +1114,20 @@ func (d *Decoder) createDecodedNewValue(
 		if err := d.decodeValue(ctx, newValue, node); err != nil {
 			return reflect.Value{}, err
 		}
+	} else if newValue.CanAddr() {
+		// For null nodes, notify BytesUnmarshaler implementations so they can
+		// distinguish "field: null" from field omission. Only BytesUnmarshaler
+		// is called; other unmarshaler interfaces (InterfaceUnmarshaler,
+		// NodeUnmarshaler) retain the existing skip-on-null behavior.
+		if u, ok := newValue.Addr().Interface().(BytesUnmarshaler); ok {
+			b, err := d.unmarshalableDocument(node)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			if err := u.UnmarshalYAML(b); err != nil {
+				return reflect.Value{}, err
+			}
+		}
 	}
 	return d.castToAssignableValue(newValue, typ, node)
 }

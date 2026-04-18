@@ -4169,3 +4169,105 @@ func TestIssue735(t *testing.T) {
 		}
 	})
 }
+
+// nullDetector implements BytesUnmarshaler and tracks whether it was called.
+type nullDetector struct {
+	called bool
+	data   []byte
+}
+
+func (n *nullDetector) UnmarshalYAML(data []byte) error {
+	n.called = true
+	n.data = data
+	return nil
+}
+
+func TestBytesUnmarshalerCalledOnNull(t *testing.T) {
+	type Config struct {
+		Field nullDetector `yaml:"field"`
+		Name  string       `yaml:"name"`
+	}
+
+	t.Run("explicit null calls BytesUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\nfield: null\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if !c.Field.called {
+			t.Error("expected BytesUnmarshaler to be called for null value")
+		}
+		if string(c.Field.data) != "null" {
+			t.Errorf("expected data to be %q, got %q", "null", string(c.Field.data))
+		}
+	})
+
+	t.Run("tilde null calls BytesUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\nfield: ~\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if !c.Field.called {
+			t.Error("expected BytesUnmarshaler to be called for ~ value")
+		}
+	})
+
+	t.Run("omitted field does not call BytesUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if c.Field.called {
+			t.Error("expected BytesUnmarshaler NOT to be called when field is omitted")
+		}
+	})
+
+	t.Run("normal value calls BytesUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\nfield: hello\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if !c.Field.called {
+			t.Error("expected BytesUnmarshaler to be called for normal value")
+		}
+		if string(c.Field.data) != "hello" {
+			t.Errorf("expected data to be %q, got %q", "hello", string(c.Field.data))
+		}
+	})
+}
+
+// interfaceUnmarshalerNullTracker implements InterfaceUnmarshaler and tracks calls.
+type interfaceUnmarshalerNullTracker struct {
+	called bool
+}
+
+func (i *interfaceUnmarshalerNullTracker) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	i.called = true
+	return nil
+}
+
+func TestInterfaceUnmarshalerNotCalledOnNull(t *testing.T) {
+	type Config struct {
+		Field interfaceUnmarshalerNullTracker `yaml:"field"`
+		Name  string                          `yaml:"name"`
+	}
+
+	t.Run("null does not call InterfaceUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\nfield: null\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if c.Field.called {
+			t.Error("expected InterfaceUnmarshaler NOT to be called for null value")
+		}
+	})
+
+	t.Run("normal value calls InterfaceUnmarshaler", func(t *testing.T) {
+		var c Config
+		if err := yaml.Unmarshal([]byte("name: test\nfield: hello\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		if !c.Field.called {
+			t.Error("expected InterfaceUnmarshaler to be called for normal value")
+		}
+	})
+}
